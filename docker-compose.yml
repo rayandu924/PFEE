@@ -1,0 +1,22 @@
+version: '3'
+services:
+  sender:
+    build:
+      context: ./sender
+      dockerfile: Dockerfile
+    image: sender
+    environment:
+      - RESOLUTION=${RESOLUTION}
+      - CODEC=${CODEC}
+      - FORMAT=${FORMAT}
+    command: "./sender.sh ${RESOLUTION} $CODEC $FORMAT"
+
+  receiver:
+    build:
+      context: ./receiver
+      dockerfile: Dockerfile
+    image: receiver
+    environment:
+      - CODEC=${CODEC}
+      - FORMAT=${FORMAT}
+    command: "./receiver.sh $CODEC $FORMAT"
