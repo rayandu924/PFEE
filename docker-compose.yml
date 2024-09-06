@@ -9,7 +9,7 @@ services:
       - RESOLUTION=${RESOLUTION}
       - CODEC=${CODEC}
       - FORMAT=${FORMAT}
-    command: "./sender.sh ${RESOLUTION} $CODEC $FORMAT"
+    command: "./sender.sh"
 
   receiver:
     build:
@@ -19,4 +19,4 @@ services:
     environment:
       - CODEC=${CODEC}
       - FORMAT=${FORMAT}
-    command: "./receiver.sh $CODEC $FORMAT"
+    command: "./receiver.sh"

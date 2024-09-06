@@ -53,7 +53,7 @@ measure_latency() {
 mkdir -p results
 
 # Boucle sur toutes les combinaisons
-codecs=("h264" "h265" "vp8" "vp9")
+codecs=("x264enc")
 resolutions=("1280x720" "1920x1080" "3840x2160")
 formats=("udp" "rtp" "webrtc")
 
