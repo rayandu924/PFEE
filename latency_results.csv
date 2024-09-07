@@ -1,0 +1,12 @@
+Encodeur,LatenceMin(ms),LatenceMax(ms)
+y4menc,0,0
+x265enc,0,0
+x264enc,0,0
+webpenc,0,0
+wavpackenc,0,0
+wavenc,0,0
+vp9enc,0,0
+vp8enc,0,0
+vorbisenc,0,0
+voamrwbenc,0,0
+avenc_zmbv,0,0

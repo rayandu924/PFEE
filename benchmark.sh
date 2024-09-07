@@ -1,68 +1,62 @@
 #!/bin/bash
 
-# Définir la durée du test en secondes
-TEST_DURATION=100
+# Définir les encodeurs et formats que vous souhaitez tester
+encodeurs=("y4menc" "x265enc" "x264enc" "webpenc" "wavpackenc" "wavenc" "vp9enc" "vp8enc" "vorbisenc" "voamrwbenc" "avenc_zmbv")
 
-# Fonction pour mesurer la latence avec tracing
-measure_latency() {
-    codec=$1
-    resolution=$2
-    format=$3
+# Spécifier l'emplacement du Dockerfile
+dockerfile_location="."  # Remplacez par le chemin de votre Dockerfile
+image_name="gstreamer_image"
 
-    echo "Testing Codec: $codec, Resolution: $resolution, Format: $format"
+# Vidéo d'entrée pour les tests
+video_file="/home/rayandu924/lesstency/video.mp4"
 
-    # Configurer les variables d'environnement pour Docker Compose
-    export RESOLUTION=$resolution
-    export CODEC=$codec
-    export FORMAT=$format
+# Fichier CSV où enregistrer les résultats
+csv_file="latency_results.csv"
 
-    # Lancer les services avec tracing
-    env GST_DEBUG="GST_TRACER:7" \
-        GST_TRACERS="latency(flags=element+pipeline)" \
-        GST_DEBUG_FILE=./latency.log \
-        docker-compose up -d
+# Vérifier si l'image existe déjà
+if [[ "$(docker images -q $image_name 2> /dev/null)" == "" ]]; then
+  echo "Building Docker image..."
+  docker build -t $image_name $dockerfile_location
+else
+  echo "Docker image already exists."
+fi
 
-    # Attendre que la vidéo soit transmise
-    sleep $TEST_DURATION  # Utiliser la constante de durée
+# Créer ou réinitialiser le fichier CSV
+echo "Encodeur,LatenceMin(ms),LatenceMax(ms)" > $csv_file
 
-    # Vérifier si le fichier de log existe et n'est pas vide
-    if [ ! -s ./latency.log ]; then
-        echo "Error: Latency log file is empty or does not exist."
-        docker-compose down
-        return
-    fi
+# Fonction pour extraire la latence depuis les logs
+extract_latency() {
+  log_file=$1
+  # Chercher les lignes de latence dans les logs (hypothèse : 'latency:' dans les logs)
+  latencies=$(grep -oP "latency \((\d+)\): \d+" "$log_file" | awk '{print $3}')
 
-    # Analyser le fichier de log pour extraire la latence
-    latency_sum=$(grep "element-latency" ./latency.log | awk -F"time=" '{sum+=$2} END {print sum}')
-    count=$(grep "element-latency" ./latency.log | wc -l)
+  # Calculer les latences minimales et maximales
+  min_latency=$(echo "$latencies" | sort -n | head -n 1)
+  max_latency=$(echo "$latencies" | sort -n | tail -n 1)
 
-    if [ $count -gt 0 ]; then
-        average_latency=$(echo "$latency_sum / $count" | bc)
-    else
-        average_latency=0
-    fi
+  # Si aucune latence trouvée, définir à 0
+  min_latency=${min_latency:-0}
+  max_latency=${max_latency:-0}
 
-    # Stocker les résultats
-    echo "Codec: $codec, Resolution: $resolution, Format: $format, Average Latency: ${average_latency}ns" >> results/benchmark_results.txt
-
-    # Nettoyer l'environnement Docker
-    docker-compose down
+  echo "$min_latency,$max_latency"
 }
 
-# Dossier pour enregistrer les résultats
-mkdir -p results
+# Boucle sur les encodeurs
+for encodeur in "${encodeurs[@]}"; do  
+  echo "Running test for encodeur: $encodeur"
 
-# Boucle sur toutes les combinaisons
-codecs=("x264enc")
-resolutions=("1280x720" "1920x1080" "3840x2160")
-formats=("udp" "rtp" "webrtc")
+  # Construire la commande GStreamer pour l'encodeur et le format donnés
+  gst_command="GST_DEBUG=2 gst-launch-1.0 -v filesrc location=$video_file ! video/x-raw,width=1920,height=1080 ! videoconvert ! $encodeur ! fakesink sync=true"
 
-for codec in "${codecs[@]}"; do
-  for resolution in "${resolutions[@]}"; do
-    for format in "${formats[@]}"; do
-      measure_latency $codec $resolution $format
-    done
-  done
+  # Exécuter la commande GStreamer dans un conteneur Docker avec un nom unique
+  log_file="logs/${encodeur}_log.txt"
+  docker run --rm --name "${encodeur}_container" $image_name bash -c "$gst_command" 2>&1 | tee "$log_file"
+
+  # Extraire la latence depuis les logs
+  latencies=$(extract_latency "$log_file")
+
+  # Écrire les résultats dans le fichier CSV
+  echo "$encodeur,$latencies" >> $csv_file
 done
 
-echo "Benchmark terminé ! Les résultats sont dans le fichier results/benchmark_results.txt."
+echo "Latency measurements saved to $csv_file"

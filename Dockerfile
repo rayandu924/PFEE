@@ -9,9 +9,3 @@ RUN apt-get update && apt-get install -y \
     gstreamer1.0-plugins-ugly \
     gstreamer1.0-libav \
     && apt-get clean
-
-# Copier les scripts dans le conteneur
-COPY sender.sh sender.sh
-
-# Commande par défaut
-CMD ["/bin/bash"]
