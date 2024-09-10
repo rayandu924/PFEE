@@ -1,6 +1,0 @@
-Encodeur,LatenceMin(ms),LatenceMax(ms)
-x264enc,0,0
-x265enc,0,0
-vp8enc,0,0
-vp9enc,0,0
-avenc_zmbv,0,0
