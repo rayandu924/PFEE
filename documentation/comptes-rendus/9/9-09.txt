@@ -34,7 +34,7 @@ Nous avons finalement réussi à nous connecter à la caméra installée dans le
 
 Ce compte rendu resume les principales étapes et discussions de la journée.
 
-Nos objectifs urgents sont de réaliser :
+**Nos objectifs urgents sont de réaliser :**
 - Un diffusions via WebRTC (réalisation d'une client/receveur + mise en place d'un serveur de signalement)
 - Un fois cela fait, réaliser un scénario finale, à l'aide du serveur de stitching par défaut (pour le moment, en attente du groupe de stitching)
 
