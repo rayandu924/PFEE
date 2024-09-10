@@ -1,8 +1,4 @@
-Voici le compte rendu réécrit :
-
----
-
-**Compte rendu de la journée**
+Compte rendu de la journée
 
 Aujourd'hui, nous avons pris le temps de nous familiariser avec les lieux et d'évaluer l'environnement de travail. Cette étape a suscité de nombreuses questions sur le projet en cours, notamment sur les aspects techniques et logistiques. Voici les principaux sujets abordés :
 
@@ -12,33 +8,33 @@ Aujourd'hui, nous avons pris le temps de nous familiariser avec les lieux et d'�
 - Concernant l'audio, nous nous sommes demandé s'il était vraiment nécessaire de le prendre en charge. L'audio de la caméra étant éloigné des chirurgiens, il semblerait plus pertinent de réfléchir à une solution audio parallèle.
 - Enfin, nous avons discuté de la création d'une interface utilisateur simplifiée pour éviter que les chirurgiens n'aient à utiliser des lignes de commande pour démarrer la diffusion.
 
-**11h00**  
+11h00  
 Nous avons essayé de nous connecter au NAS, l'appareil prévu pour le rendu vidéo, mais sans succès. Plusieurs tentatives tout au long de la journée, incluant la configuration du NAS sur le serveur local de l'hôpital et l'achat d'un routeur, n'ont pas permis de résoudre le problème.
 
-**12h00**  
+12h00  
 Nous avons testé le logiciel de la caméra ainsi que le rendu par défaut, ce qui nous a permis de mieux comprendre les capacités du matériel.
 
-**13h00**  
+13h00  
 En explorant les programmes existants, nous avons découvert que le serveur de stitching (chargé de combiner les flux vidéo de plusieurs caméras pour créer une vue à 360°) encode déjà les vidéos. Un encodage supplémentaire pour compresser le flux serait donc inutile.
 
-**14h00**  
+14h00  
 Nous avons de nouveau discuté du scénario final et de la disposition des équipements. Cela nous a permis de clarifier que le NAS fourni n’était pas adapté pour le rendu vidéo, contrairement à ce que nous pensions lors de notre visite en juin.
 
 Nous avons également abordé la question de la connexion internet de l'hôpital, qui offre une bande passante sortante d’environ 600 Mbps. Cela semble suffisant pour diffuser une vidéo du bloc opératoire à l’international, avec un besoin estimé entre 200 et 400 Mbps.
 
-**17h00**  
+17h00  
 Imane nous a précisé que le NAS était destiné à la sauvegarde des données et non au rendu vidéo. Pour le développement, les cartes graphiques des PC actuels sont suffisamment performantes grâce à leurs encodeurs, mais pour la solution finale, un serveur dédié avec une carte graphique serait plus approprié.
 
-**19h00**  
+19h00  
 Nous avons finalement réussi à nous connecter à la caméra installée dans le bloc opératoire par Cédric, via un câble fibre optique. Nous avons constaté une latence d’environ 2 secondes.
 
 Ce compte rendu resume les principales étapes et discussions de la journée.
 
-**Nos objectifs urgents sont de réaliser :**
+Nos objectifs urgents sont de réaliser :
 - Un diffusions via WebRTC (réalisation d'une client/receveur + mise en place d'un serveur de signalement)
 - Un fois cela fait, réaliser un scénario finale, à l'aide du serveur de stitching par défaut (pour le moment, en attente du groupe de stitching)
 
 ---
 
-**Impression personnelle**  
+Impression personnelle  
 Malgré quelques difficultés de communication et de compréhension, cette première journée s'est bien déroulée et nous a permis de clarifier plusieurs points. Cédric nous a très bien accueillis et nous avons rapidement sympathisé. Il s’investit pleinement dans le projet et les discussions pour résoudre les problèmes sont très dynamiques. Nous allons désormais nous concentrer sur la phase de programmation.
