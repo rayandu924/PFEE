@@ -2,16 +2,10 @@ import asyncio
 import json
 from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription
-from aiortc.contrib.media import MediaPlayer
 from aiortc.sdp import candidate_from_sdp
 
 # Dictionnaire pour stocker les connexions WebRTC
 connected_peers = {}
-
-# Ajouter un serveur STUN pour l'optimisation des candidats ICE
-# Vous pouvez également ajouter un serveur TURN en tant que solution de secours
-stun_server = "stun:stun.l.google.com:19302"
-ice_servers = [{"urls": stun_server}]  # Ajouter un serveur TURN si nécessaire ici
 
 # Gestionnaire WebSocket pour la signalisation
 async def websocket_handler(request):
@@ -22,48 +16,58 @@ async def websocket_handler(request):
     connected_peers[peer_id] = ws
     print(f"Nouveau pair connecté: {peer_id}")
     
-    # Créer une nouvelle connexion WebRTC pour ce pair
-    peer_connection = RTCPeerConnection(configuration={"iceServers": ice_servers})
+    try:
+        # Créer une nouvelle connexion WebRTC pour ce pair avec la configuration des serveurs STUN/TURN
+        peer_connection = RTCPeerConnection()
+        print("Nouvelle connexion WebRTC créée pour le pair:", peer_id)
 
-    # Gérer les événements ICE
-    @peer_connection.on("icecandidate")
-    async def on_ice_candidate(candidate):
-        if candidate:
-            # Envoyer les candidats ICE au pair via WebSocket
-            await ws.send_json({
-                "type": "candidate",
-                "candidate": candidate.to_sdp()
-            })
-
-    # Optimisation 2 : Minimiser les messages de signalisation
-    # Utiliser uniquement les messages essentiels (offre/réponse et candidats ICE)
-    
-    async for msg in ws:
-        if msg.type == web.WSMsgType.TEXT:
-            data = json.loads(msg.data)
-
-            # Gérer une offre (offer) du pair
-            if data["type"] == "offer":
-                # Définir la description distante
-                offer = RTCSessionDescription(sdp=data["sdp"], type=data["type"])
-                await peer_connection.setRemoteDescription(offer)
-
-                # Créer et envoyer une réponse (answer)
-                answer = await peer_connection.createAnswer()
-                await peer_connection.setLocalDescription(answer)
-
-                # Envoyer la réponse au pair
+        # Gérer les événements ICE
+        @peer_connection.on("icecandidate")
+        async def on_ice_candidate(candidate):
+            if candidate:
+                print("Candidat ICE généré pour le pair:", peer_id, candidate.to_sdp())
                 await ws.send_json({
-                    "type": peer_connection.localDescription.type,
-                    "sdp": peer_connection.localDescription.sdp
+                    "type": "candidate",
+                    "candidate": candidate.to_sdp()
                 })
 
-            # Gérer les candidats ICE
-            elif data["type"] == "candidate":
-                candidate = candidate_from_sdp(data["candidate"])
-                await peer_connection.addIceCandidate(candidate)
+        # Attente des messages WebSocket du client
+        async for msg in ws:
+            if msg.type == web.WSMsgType.TEXT:
+                data = json.loads(msg.data)
+                print(f"Message reçu du pair {peer_id}: {data}")
 
-        # Autres messages de signalisation peuvent être ignorés si non nécessaires
+                # Gérer une offre (offer) du pair
+                if data["type"] == "offer":
+                    offer = RTCSessionDescription(sdp=data["sdp"], type=data["type"])
+                    print(f"Offre SDP reçue du pair {peer_id}: {offer.sdp}")
+                    await peer_connection.setRemoteDescription(offer)
+
+                    # Créer et envoyer une réponse (answer)
+                    answer = await peer_connection.createAnswer()
+                    await peer_connection.setLocalDescription(answer)
+
+                    print(f"Réponse SDP envoyée au pair {peer_id}: {answer.sdp}")
+                    await ws.send_json({
+                        "type": peer_connection.localDescription.type,
+                        "sdp": peer_connection.localDescription.sdp
+                    })
+
+                # Gérer les candidats ICE
+                elif data["type"] == "candidate":
+                    print(f"Candidat ICE reçu du pair {peer_id}: {data['candidate']}")
+                    candidate = candidate_from_sdp(data["candidate"])
+                    await peer_connection.addIceCandidate(candidate)
+
+            else:
+                print(f"Message inattendu reçu du pair {peer_id}: {msg}")
+
+    except Exception as e:
+        print(f"Erreur lors du traitement du pair {peer_id}: {e}")
+    finally:
+        # Retirer la connexion à la fin de la session WebSocket
+        del connected_peers[peer_id]
+        print(f"Connexion fermée pour le pair {peer_id}")
 
     return ws
 
