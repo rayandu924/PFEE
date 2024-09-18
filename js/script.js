@@ -1,3 +1,7 @@
+//faire que de la diffusion finalement pas de reception
+// reception uniquement coté casque vr
+// prendre un flux 
+// clean le code et enlever les choses inutiles
 const signalingServerUrl = 'ws://localhost:3000'; // WebSocket signaling server URL
 const signalingSocket = new WebSocket(signalingServerUrl);
 const localVideo = document.getElementById('localVideo');
