@@ -1,7 +1,3 @@
-// **********************************
-// Sender - Vital Elements
-// **********************************
-
 const signalingServerUrl = 'ws://localhost:3000'; // WebSocket signaling server URL
 const signalingSocket = new WebSocket(signalingServerUrl);
 const localVideo = document.getElementById('localVideo');
@@ -9,81 +5,46 @@ let localStream, peerConnection;
 
 const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
-// **********************************
-// Signaling and WebSocket Handling
-// **********************************
-
+// Optimized WebSocket handling
 signalingSocket.onopen = () => {
   console.log('Signaling server connected');
   startLocalStream();
 };
 
 signalingSocket.onmessage = async (event) => {
-  try {
-    const data = await extractData(event);
-    if (data.answer) {
-      handleAnswer(data.answer);
-    } else if (data.candidate) {
-      handleCandidate(data.candidate);
-    }
-  } catch (error) {
-    console.error('Error processing WebSocket message:', error);
-  }
+  const data = typeof event.data === 'string' ? JSON.parse(event.data) : await event.data.text().then(JSON.parse);
+  if (data.answer) handleAnswer(data.answer);
+  if (data.candidate) handleCandidate(data.candidate);
 };
-
-async function extractData(event) {
-  if (event.data instanceof Blob) {
-    const textData = await event.data.text();
-    return JSON.parse(textData);
-  } else {
-    return JSON.parse(event.data);
-  }
-}
-
-// **********************************
-// Local Stream and Peer Connection Setup
-// **********************************
 
 function startLocalStream() {
   navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-    .then(stream => {
+    .then((stream) => {
       localStream = stream;
-      localVideo.srcObject = localStream; // Display local video
+      localVideo.srcObject = localStream;
       setupPeerConnection();
     })
-    .catch(error => console.error('Error accessing media devices:', error));
+    .catch(console.error);
 }
 
 function setupPeerConnection() {
   peerConnection = new RTCPeerConnection(config);
-
-  // Add local stream tracks to the peer connection
-  localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-  // Handle ICE candidates and send them to the signaling server
+  localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
   peerConnection.onicecandidate = (event) => {
     if (event.candidate) {
       signalingSocket.send(JSON.stringify({ candidate: event.candidate }));
     }
   };
-
-  // Create and send an offer to the signaling server
   peerConnection.createOffer()
-    .then(offer => {
-      return peerConnection.setLocalDescription(offer);
-    })
-    .then(() => {
-      signalingSocket.send(JSON.stringify({ offer: peerConnection.localDescription }));
-    })
-    .catch(error => console.error('Error creating an offer:', error));
+    .then((offer) => peerConnection.setLocalDescription(offer))
+    .then(() => signalingSocket.send(JSON.stringify({ offer: peerConnection.localDescription })))
+    .catch(console.error);
 }
 
 function handleAnswer(answer) {
-  peerConnection.setRemoteDescription(new RTCSessionDescription(answer))
-    .catch(error => console.error('Error setting remote description:', error));
+  peerConnection.setRemoteDescription(new RTCSessionDescription(answer)).catch(console.error);
 }
 
 function handleCandidate(candidate) {
-  peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
-    .catch(error => console.error('Error adding ICE candidate:', error));
+  peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
 }
