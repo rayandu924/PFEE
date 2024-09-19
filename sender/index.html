@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Janus WebRTC Sender</title>
+  <script src="../janus-gateway/src/"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+</head>
+<body>
+  <h1>WebRTC Video Sender</h1>
+  <video id="localVideo" width="640" height="480" autoplay muted></video>
+  <button id="start">Start Streaming</button>
+
+  <script>
+    var janus = null;
+    var streaming = null;
+    var opaqueId = "streamingsender-" + Janus.randomString(12);
+    var server = "http://localhost:8088/janus";  // URL of your Janus server
+
+    Janus.init({
+      debug: "all",
+      callback: function() {
+        $('#start').click(function() {
+          janus = new Janus({
+            server: server,
+            success: function() {
+              janus.attach({
+                plugin: "janus.plugin.streaming",
+                opaqueId: opaqueId,
+                success: function(pluginHandle) {
+                  streaming = pluginHandle;
+
+                  // Capture the local video stream
+                  navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+                    .then(function(stream) {
+                      $('#localVideo').get(0).srcObject = stream;
+                      streaming.createOffer({
+                        media: { video: stream, audioSend: false, videoSend: true },
+                        success: function(jsep) {
+                          var body = { request: "publish", id: 1 };  // Stream ID is 1
+                          streaming.send({ message: body, jsep: jsep });
+                        }
+                      });
+                    }).catch(function(err) {
+                      console.error("Error accessing webcam: ", err);
+                    });
+                },
+                onmessage: function(msg, jsep) {
+                  if (jsep !== undefined && jsep !== null) {
+                    streaming.handleRemoteJsep({ jsep: jsep });
+                  }
+                }
+              });
+            }
+          });
+        });
+      }
+    });
+  </script>
+</body>
+</html>
