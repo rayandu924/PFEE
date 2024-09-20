@@ -1,0 +1,3 @@
+janus-apierror.o: apierror.c /usr/include/stdc-predef.h apierror.h
+/usr/include/stdc-predef.h:
+apierror.h:
