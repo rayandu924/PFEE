@@ -22,21 +22,25 @@ git clone https://github.com/rayandu924/lesstency.git
 cd lesstency
 ```
 
-### Install Dependencies
+### Install Janus WebRTC Gateway**
 
-Janus requires several dependencies to function correctly. Run the following command to install all necessary libraries:
+1. **Install dependencies** on Ubuntu or a similar Linux distribution:
+   ```bash
+   sudo apt-get update
+   sudo apt-get install libmicrohttpd-dev libjansson-dev libssl-dev libsofia-sip-ua-dev libglib2.0-dev \
+   libopus-dev libogg-dev libini-config-dev libcollection-dev libconfig-dev pkg-config gengetopt \
+   libtool automake gtk-doc-tools cmake
+   ```
 
-```bash
-sudo apt-get update
-sudo apt-get install -y libmicrohttpd-dev libjansson-dev \
-  libssl-dev libsrtp2-dev libsofia-sip-ua-dev libglib2.0-dev \
-  libopus-dev libogg-dev libini-config-dev libcollection-dev \
-  libyaml-dev pkg-config gengetopt libtool automake
-```
-
-Ensure all libraries are installed successfully before proceeding.
-
----
+2. **Download and compile Janus WebRTC Gateway**:
+   ```bash
+   cd janus-gateway
+   sh autogen.sh
+   ./configure --prefix=/opt/janus
+   make
+   sudo make install
+   sudo make configs
+   ```
 
 ## Modifying Video Stream Configuration
 
@@ -66,6 +70,7 @@ To modify the video stream, you need to update the configuration file for the st
 Once you have modified the stream configuration, you can now launch Janus:
 
 ```bash
+cd janus-gateway
 sudo janus
 ```
 
@@ -75,15 +80,11 @@ sudo janus
 
 ## Accessing the Web Client
 
-To test Janus, use the web client located in the repository. Follow these steps:
+To watch stream, use the web client located in the repository. Follow these steps:
 
-1. Navigate to the `client` directory:
+2. Open the client web page in your browser:
    ```bash
-   cd lesstency/client
-   ```
-
-2. Open the `index.html` file in your browser:
-   ```bash
+   cd client
    open index.html
    ```
 
