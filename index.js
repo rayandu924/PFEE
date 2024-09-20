@@ -78,7 +78,7 @@ $(document).ready(function () {
                                     console.log("Remote track removed (mid=" + mid + ")");
                                     return; // Track removed
                                 }
-
+                            
                                 console.log("New remote track added (mid=" + mid + ")", track);
                                 console.log("Track kind: " + track.kind);  // Log track type (video/audio)
                                 console.log("Track readyState: " + track.readyState);  // Check if track is live
@@ -86,7 +86,8 @@ $(document).ready(function () {
                                 // Create a MediaStream and attach it to the video element
                                 var stream = new MediaStream([track]);
                                 $('#videos').append('<video id="remotevideo" width="640" height="480" autoplay playsinline></video>');
-                                Janus.attachMediaStream($('#remotevideo').get(0), stream);
+                                const videoElement = $('#remotevideo').get(0);
+                                Janus.attachMediaStream(videoElement, stream);
                             },
                             iceState: function (state) {
                                 console.log("ICE connection state changed to: " + state);  // Log ICE connection states (checking, connected, completed, etc.)
