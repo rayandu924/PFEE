@@ -1,25 +1,13 @@
 # Janus Gateway Custom Repository
 
-This repository contains a customized version of the Janus Gateway with additional features and configurations. Follow the instructions below to install the necessary libraries, modify the video stream configuration, and launch Janus.
+This repository contains a customized version of the Janus Gateway for RTSP streaming.
 
 ## Table of Contents
-1. [Prerequisites](#prerequisites)
-2. [Installation](#installation)
-3. [Modifying Video Stream Configuration](#modifying-video-stream-configuration)
-4. [Launching Janus](#launching-janus)
-5. [Accessing the Web Client](#accessing-the-web-client)
-6. [Viewing WebRTC Metrics](#viewing-webrtc-metrics)
-
----
-
-## Prerequisites
-
-Before starting, ensure that you have the following installed on your Ubuntu machine:
-
-- Git
-- Necessary libraries for Janus (automated installation provided in the repository)
-
-Ensure Janus is already installed as this repository includes configurations for it.
+1. [Installation](#installation)
+2. [Modifying Video Stream Configuration](#modifying-video-stream-configuration)
+3. [Launching Janus](#launching-janus)
+4. [Accessing the Web Client](#accessing-the-web-client)
+5. [Viewing WebRTC Metrics](#viewing-webrtc-metrics)
 
 ---
 
@@ -30,8 +18,8 @@ Ensure Janus is already installed as this repository includes configurations for
 First, clone the repository to your local machine:
 
 ```bash
-git clone https://github.com/your-username/your-repo.git
-cd your-repo
+git clone https://github.com/rayandu924/lesstency.git
+cd lesstency
 ```
 
 ### Install Dependencies
@@ -63,16 +51,9 @@ To modify the video stream, you need to update the configuration file for the st
 
    ```plaintext
    rtsp-test: {
-       type = "rtsp"
-       id = 4
-       description = "Local RTSP Stream"
-       audio = false
-       video = true
-       url = "rtsp://127.0.0.1:8554/monflux"
-       rtsp_reconnect_delay = 5
-       rtsp_session_timeout = 0
-       rtsp_timeout = 10
-       rtsp_conn_timeout = 5
+       ...
+       url = "rtsp://ip-address:port/stream";
+       ...
    }
    ```
 
@@ -98,7 +79,7 @@ To test Janus, use the web client located in the repository. Follow these steps:
 
 1. Navigate to the `client` directory:
    ```bash
-   cd your-repo/client
+   cd lesstency/client
    ```
 
 2. Open the `index.html` file in your browser:
