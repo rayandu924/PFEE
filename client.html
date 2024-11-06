@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>RTSP vers WebRTC avec faible latence</title>
+</head>
+<body>
+  <video id="video" autoplay playsinline controls></video>
+  <script>
+    var pc = new RTCPeerConnection();
+
+    pc.ontrack = function(event) {
+      var video = document.getElementById('video');
+      if (video.srcObject !== event.streams[0]) {
+        video.srcObject = event.streams[0];
+        video.play();
+      }
+    };
+
+    var constraints = {
+      offerToReceiveVideo: true,
+      offerToReceiveAudio: false
+    };
+
+    pc.createOffer(constraints).then(function(offer) {
+      return pc.setLocalDescription(offer);
+    }).then(function() {
+      // Envoyer l'offre au serveur
+      return fetch('/offer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sdp: pc.localDescription.sdp,
+          type: pc.localDescription.type
+        })
+      });
+    }).then(function(response) {
+      return response.json();
+    }).then(function(answer) {
+      return pc.setRemoteDescription(new RTCSessionDescription(answer));
+    }).catch(function(error) {
+      console.error('Erreur lors de l\'établissement de la connexion WebRTC :', error);
+    });
+
+    pc.onicecandidate = function(event) {
+      if (event.candidate) {
+        // Vous pouvez envoyer les candidats ICE au serveur si nécessaire
+      } else {
+        console.log('Rassemblement ICE terminé');
+      }
+    };
+  </script>
+</body>
+</html>
