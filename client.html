@@ -1,20 +1,42 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html>
 <head>
   <title>RTSP vers WebRTC avec faible latence</title>
 </head>
 <body>
   <video id="video" autoplay playsinline controls></video>
+  <button id="playButton">Lire la vidéo</button>
   <script>
+    const DEBUG_MODE = true;
+
+    function debugLog(...args) {
+      if (DEBUG_MODE) {
+        console.log('[DEBUG]', ...args);
+      }
+    }
+
     var pc = new RTCPeerConnection();
 
     pc.ontrack = function(event) {
+      debugLog('ontrack appelé avec', event);
       var video = document.getElementById('video');
       if (video.srcObject !== event.streams[0]) {
         video.srcObject = event.streams[0];
-        video.play();
+        debugLog('Source vidéo mise à jour');
+        // Ne pas appeler video.play() ici
       }
     };
+
+    document.addEventListener('DOMContentLoaded', function() {
+      var playButton = document.getElementById('playButton');
+      playButton.addEventListener('click', function() {
+        var video = document.getElementById('video');
+        video.play().catch(function(error) {
+          console.error('Erreur lors de la lecture de la vidéo :', error);
+        });
+        debugLog('Bouton play cliqué');
+      });
+    });
 
     var constraints = {
       offerToReceiveVideo: true,
@@ -22,8 +44,10 @@
     };
 
     pc.createOffer(constraints).then(function(offer) {
+      debugLog('Offre créée');
       return pc.setLocalDescription(offer);
     }).then(function() {
+      debugLog('Description locale définie, envoi de l\'offre au serveur');
       // Envoyer l'offre au serveur
       return fetch('/offer', {
         method: 'POST',
@@ -36,18 +60,22 @@
         })
       });
     }).then(function(response) {
+      debugLog('Réponse du serveur reçue');
       return response.json();
     }).then(function(answer) {
+      debugLog('Réponse SDP reçue du serveur', answer);
       return pc.setRemoteDescription(new RTCSessionDescription(answer));
     }).catch(function(error) {
       console.error('Erreur lors de l\'établissement de la connexion WebRTC :', error);
+      debugLog('Erreur WebRTC:', error);
     });
 
     pc.onicecandidate = function(event) {
       if (event.candidate) {
+        debugLog('Candidat ICE généré', event.candidate);
         // Vous pouvez envoyer les candidats ICE au serveur si nécessaire
       } else {
-        console.log('Rassemblement ICE terminé');
+        debugLog('Rassemblement ICE terminé');
       }
     };
   </script>
