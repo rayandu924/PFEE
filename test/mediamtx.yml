@@ -1,4 +1,0 @@
-paths:
-  video360:
-    runOnDemand: ffmpeg -re -stream_loop -1 -i /video360.mp4 -c copy -bufsize 5000k -f rtsp rtsp://localhost:8554/video360
-    runOnDemandRestart: yes
