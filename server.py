@@ -2,56 +2,111 @@ import asyncio
 import json
 import logging
 import os
-from typing import Set
 import uuid
+from typing import Set, Optional
 
 from aiohttp import web
 import aiohttp_cors
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate
+from aiortc import (
+    RTCPeerConnection,
+    RTCSessionDescription,
+    RTCIceCandidate,
+    RTCConfiguration,
+    RTCIceServer,
+)
 from aiortc.contrib.media import MediaPlayer, MediaRelay
 
-# Configuration du logging
+# ========================================
+# Configuration
+# ========================================
+
+# Logging configuration
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("webrtc-server")
 
+# Server configuration
 ROOT = os.path.dirname(__file__)
+PORT = 8080
+HOST = "0.0.0.0"
+
+# Media configuration
+CAMERA_NAME = "USB Camera"  # Nom de la caméra à ajuster
+MEDIA_FORMAT = "dshow" if os.name == "nt" else "v4l2"
+MEDIA_OPTIONS = {
+    "rtbufsize": "1000000000",
+    "video_size": "1280x720",  # Résolution améliorée
+    "framerate": "10",  # Taux de rafraîchissement
+}
+
+# WebRTC configuration
+ICE_SERVERS = [
+    RTCIceServer(
+        urls=["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]
+    ),
+    # Vous pouvez ajouter des serveurs TURN ici si nécessaire
+]
+RTC_CONFIG = RTCConfiguration(
+    iceServers=ICE_SERVERS,
+    #iceTransportPolicy="all",  # Exemple de politique de transport ICE
+    # bundlePolicy="max-bundle",  # Commenté si non supporté
+    #sdpSemantics="unified-plan",  # Semantique SDP
+)
+
+# Track configuration
+TRACK_OPTIONS = {
+    "bitrate": 500,  # Bitrate en kbps
+    "codec": "VP8",  # Codec vidéo
+}
+
+# ========================================
+# Global Variables
+# ========================================
+
 pcs: Set[RTCPeerConnection] = set()
 relay = MediaRelay()
 connections = {}
 
-# Nom de la caméra (à ajuster selon votre système)
-CAMERA_NAME = "USB Camera"
+# ========================================
+# Media Player Initialization
+# ========================================
 
-# Initialisation de MediaPlayer
-logger.info("Initialisation de MediaPlayer pour la caméra USB")
-player = MediaPlayer(
-    f"video={CAMERA_NAME}",
-    format="dshow" if os.name == "nt" else "v4l2",
-    options={
-        "video_size": "160x120"
-    }
-)
-
-if player.video:
-    relay_track = relay.subscribe(player.video)
-    logger.info("MediaPlayer initialisé avec succès")
-else:
-    relay_track = None
-    logger.error("Échec de l'initialisation de la piste vidéo depuis MediaPlayer")
-
-async def index(request):
+def initialize_media_player() -> Optional:
     """
-    Sert la page HTML principale.
+    Initialise le MediaPlayer pour capturer la vidéo de la caméra.
     """
-    logger.debug("Requête GET reçue pour '/'")
-    return web.FileResponse(os.path.join(ROOT, "index.html"))
+    logger.info(f"Initialisation de MediaPlayer pour la caméra {CAMERA_NAME}")
+    try:
+        player = MediaPlayer(
+            f"video={CAMERA_NAME}",
+            format=MEDIA_FORMAT,
+            options=MEDIA_OPTIONS,
+        )
+        if player.video:
+            relay_track = relay.subscribe(player.video)
+            logger.info("MediaPlayer initialisé avec succès")
+            return relay_track
+        else:
+            logger.error("Aucune piste vidéo trouvée dans MediaPlayer")
+            return None
+    except Exception as e:
+        logger.error(f"Erreur lors de l'initialisation de MediaPlayer : {e}")
+        return None
 
-async def wait_for_ice_gathering_complete(pc: RTCPeerConnection, timeout=10):
+relay_track = initialize_media_player()
+
+# ========================================
+# Helper Functions
+# ========================================
+
+async def wait_for_ice_gathering_complete(
+    pc: RTCPeerConnection, timeout: int = 10
+) -> None:
     """
     Attend que la collecte ICE soit terminée ou qu'un délai soit atteint.
     """
     if pc.iceGatheringState == "complete":
         return
+
     fut = asyncio.get_event_loop().create_future()
 
     def on_state_change():
@@ -66,103 +121,109 @@ async def wait_for_ice_gathering_complete(pc: RTCPeerConnection, timeout=10):
     except asyncio.TimeoutError:
         logger.warning("La collecte ICE a expiré")
 
-async def offer(request):
+def create_peer_connection(connection_id: str) -> RTCPeerConnection:
     """
-    Traite les offres SDP des clients et répond avec des réponses SDP contenant un identifiant de connexion unique.
+    Crée et configure une nouvelle RTCPeerConnection.
+    """
+    pc = RTCPeerConnection(configuration=RTC_CONFIG)
+    pcs.add(pc)
+    connections[connection_id] = pc
+    logger.info(f"Nouvelle RTCPeerConnection créée avec ID : {connection_id}")
+
+    @pc.on("connectionstatechange")
+    async def on_connectionstatechange():
+        logger.info(f"État de la connexion {connection_id} changé en : {pc.connectionState}")
+        if pc.connectionState in ["failed", "closed"]:
+            await pc.close()
+            pcs.discard(pc)
+            connections.pop(connection_id, None)
+            logger.info(f"RTCPeerConnection {connection_id} fermée et supprimée")
+
+    return pc
+
+# ========================================
+# Route Handlers
+# ========================================
+
+async def handle_index(request: web.Request) -> web.FileResponse:
+    """
+    Sert la page HTML principale.
+    """
+    logger.debug("Requête GET reçue pour '/'")
+    return web.FileResponse(os.path.join(ROOT, "index.html"))
+
+async def handle_offer(request: web.Request) -> web.Response:
+    """
+    Traite les offres SDP envoyées par les clients.
     """
     logger.debug("Requête POST reçue sur /offer")
     try:
         params = await request.json()
         offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
         logger.debug(f"Offre SDP analysée :\n{offer.sdp}")
-    except Exception as e:
+    except (KeyError, json.JSONDecodeError) as e:
         logger.error(f"Échec de l'analyse de l'offre SDP : {e}")
         return web.Response(status=400, text="Offre SDP invalide")
 
-    logger.info("Offre SDP reçue du client")
-
-    pc = RTCPeerConnection()
-    pcs.add(pc)
-    logger.info("Nouvelle RTCPeerConnection créée")
-
     connection_id = str(uuid.uuid4())
-    connections[connection_id] = pc
-    logger.info(f"ID de connexion attribué : {connection_id}")
+    pc = create_peer_connection(connection_id)
 
-    @pc.on("connectionstatechange")
-    async def on_connectionstatechange():
-        logger.info(f"État de la connexion changé en : {pc.connectionState}")
-        if pc.connectionState in ["failed", "closed"]:
-            await pc.close()
-            pcs.discard(pc)
-            connections.pop(connection_id, None)
-            logger.info("RTCPeerConnection fermée et supprimée")
-
-    # Définir la description distante avec l'offre SDP
     try:
         await pc.setRemoteDescription(offer)
-        logger.info("Description distante définie avec l'offre SDP")
+        logger.info(f"Description distante définie pour {connection_id}")
     except Exception as e:
-        logger.error(f"Échec de la définition de la description distante : {e}")
+        logger.error(f"Échec de la définition de la description distante pour {connection_id} : {e}")
         return web.Response(status=400, text="Échec de la définition de la description distante")
 
-    # Vérifier si l'offre inclut des sections média vidéo
-    has_video = any(line.startswith('m=video') for line in offer.sdp.splitlines())
-
-    if has_video and relay_track:
+    # Ajout de la piste vidéo si disponible
+    if "video" in offer.sdp and relay_track:
         try:
             pc.addTrack(relay_track)
-            logger.info("Piste vidéo partagée ajoutée à RTCPeerConnection")
+            logger.info(f"Piste vidéo partagée ajoutée à RTCPeerConnection {connection_id}")
         except Exception as e:
-            logger.error(f"Échec de l'ajout de la piste vidéo : {e}")
+            logger.error(f"Échec de l'ajout de la piste vidéo pour {connection_id} : {e}")
     else:
-        logger.info("Aucune section média vidéo dans l'offre SDP ou aucune piste relay disponible ; piste vidéo non ajoutée")
+        logger.warning(f"Aucune section média vidéo dans l'offre SDP ou piste relay indisponible pour {connection_id}")
 
-    # Créer la réponse SDP
     try:
         answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
-        logger.info("Réponse SDP locale créée et définie")
+        logger.info(f"Réponse SDP locale créée pour {connection_id}")
     except Exception as e:
-        logger.error(f"Échec de la création ou de la définition de la description locale : {e}")
+        logger.error(f"Échec de la création ou de la définition de la description locale pour {connection_id} : {e}")
         return web.Response(status=500, text="Échec de la création de la réponse SDP")
 
-    # Attendre la collecte ICE
-    await wait_for_ice_gathering_complete(pc, timeout=10)
-
-    logger.debug(f"Réponse SDP générée :\n{pc.localDescription.sdp}")
+    await wait_for_ice_gathering_complete(pc)
 
     response_payload = {
         "sdp": pc.localDescription.sdp,
         "type": pc.localDescription.type,
-        "id": connection_id
+        "id": connection_id,
     }
 
-    logger.debug(f"Payload de réponse envoyé : {response_payload}")
+    logger.debug(f"Payload de réponse pour {connection_id} : {response_payload}")
 
     return web.json_response(response_payload)
 
-async def candidate(request):
+async def handle_candidate(request: web.Request) -> web.Response:
     """
     Traite les candidats ICE envoyés par les clients.
     """
     try:
         params = await request.json()
-        logger.info(f"Payload de candidat ICE reçu : {params}")
         connection_id = params["id"]
         candidate = RTCIceCandidate(
             sdpMid=params["sdpMid"],
             sdpMLineIndex=params["sdpMLineIndex"],
-            candidate=params["candidate"]
+            candidate=params["candidate"],
         )
+        logger.info(f"Candidat ICE reçu pour {connection_id} : {candidate.candidate}")
     except KeyError as e:
         logger.error(f"Clé manquante dans le payload du candidat ICE : {e}")
         return web.Response(status=400, text="Candidat ICE invalide")
-    except Exception as e:
-        logger.error(f"Échec de l'analyse du candidat ICE : {e}")
+    except json.JSONDecodeError as e:
+        logger.error(f"Erreur de décodage JSON pour le candidat ICE : {e}")
         return web.Response(status=400, text="Candidat ICE invalide")
-
-    logger.info(f"Ajout du candidat ICE pour l'ID de connexion {connection_id} :\n{candidate.candidate}")
 
     pc = connections.get(connection_id)
     if not pc:
@@ -171,14 +232,18 @@ async def candidate(request):
 
     try:
         await pc.addIceCandidate(candidate)
-        logger.info("Candidat ICE ajouté avec succès")
+        logger.info(f"Candidat ICE ajouté avec succès pour {connection_id}")
     except Exception as e:
-        logger.error(f"Échec de l'ajout du candidat ICE : {e}")
+        logger.error(f"Échec de l'ajout du candidat ICE pour {connection_id} : {e}")
         return web.Response(status=400, text="Échec de l'ajout du candidat ICE")
 
     return web.Response(status=200, text="Candidat ICE ajouté avec succès")
 
-async def on_shutdown(app):
+# ========================================
+# Server Setup
+# ========================================
+
+async def on_shutdown(app: web.Application) -> None:
     """
     Nettoie toutes les connexions peer lors de l'arrêt du serveur.
     """
@@ -189,10 +254,10 @@ async def on_shutdown(app):
     connections.clear()
     logger.info("Toutes les RTCPeerConnections ont été fermées")
 
-def main():
-    app = web.Application()
-
-    # Configuration de CORS
+def setup_routes(app: web.Application) -> None:
+    """
+    Configure les routes de l'application avec CORS.
+    """
     cors = aiohttp_cors.setup(app, defaults={
         "*": aiohttp_cors.ResourceOptions(
             allow_credentials=True,
@@ -202,24 +267,27 @@ def main():
         )
     })
 
-    # Définition des routes avec CORS
-    resources = [
-        ("/", "GET", index),
-        ("/offer", "POST", offer),
-        ("/candidate", "POST", candidate)
+    routes = [
+        ("/", "GET", handle_index),
+        ("/offer", "POST", handle_offer),
+        ("/candidate", "POST", handle_candidate),
     ]
 
-    for path, method, handler in resources:
+    for path, method, handler in routes:
         resource = app.router.add_resource(path)
         route = resource.add_route(method, handler)
         cors.add(route)
 
-    # Enregistrement du gestionnaire d'arrêt
+def main() -> None:
+    """
+    Point d'entrée principal du serveur.
+    """
+    app = web.Application()
+    setup_routes(app)
     app.on_shutdown.append(on_shutdown)
 
-    port = 8080
-    logger.info(f"Démarrage du serveur de signalement sur http://0.0.0.0:{port}")
-    web.run_app(app, host="0.0.0.0", port=port)
+    logger.info(f"Démarrage du serveur de signalement sur http://{HOST}:{PORT}")
+    web.run_app(app, host=HOST, port=PORT)
 
 if __name__ == "__main__":
     main()

@@ -9,61 +9,132 @@
             background-color: #f0f0f0;
         }
         video {
-            width: 320px;
-            height: 240px;
+            width: 640px;
+            height: 480px;
             background-color: #000;
             margin-top: 20px;
+        }
+        #status {
+            margin-top: 20px;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
     <h1>WebRTC Client</h1>
     <video id="video" autoplay playsinline controls></video>
+    <div id="status">Initialisation...</div>
 
     <script>
         async function start() {
-            const pc = new RTCPeerConnection();
+            const status = document.getElementById('status');
+            const video = document.getElementById('video');
+            
+            // Configuration de la connexion RTCPeerConnection
+            const configuration = {
+                iceTransportPolicy: 'all',
+                bundlePolicy: 'max-bundle',
+                rtcpMuxPolicy: 'require',
+                sdpSemantics: 'unified-plan'
+            };
+            
+            const pc = new RTCPeerConnection(configuration);
+            let connectionId = null;
 
-            // Handle incoming tracks
-            pc.ontrack = function(event) {
+            // Gérer les pistes entrantes
+            pc.ontrack = (event) => {
                 const stream = event.streams[0];
-                const video = document.getElementById('video');
                 video.srcObject = stream;
-                console.log("Received video track");
+                console.log("Piste vidéo reçue");
+                status.textContent = "Piste vidéo reçue";
             };
 
-            // Create an offer with the expectation to receive video
-            const offer = await pc.createOffer({
-                offerToReceiveVideo: true
-            });
-            await pc.setLocalDescription(offer);
-            console.log("Created and set local SDP offer");
+            // Gérer les candidats ICE générés localement
+            pc.onicecandidate = async (event) => {
+                if (event.candidate && connectionId) {
+                    console.log("Envoi du candidat ICE au serveur :", event.candidate);
+                    status.textContent = "Envoi du candidat ICE...";
+                    await sendCandidate(connectionId, event.candidate);
+                }
+            };
 
-            // Send the offer to the server via /offer endpoint
-            const response = await fetch('/offer', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sdp: pc.localDescription.sdp,
-                    type: pc.localDescription.type
-                })
-            });
+            try {
+                // Créer une offre SDP
+                const offer = await pc.createOffer({
+                    offerToReceiveVideo: true
+                });
+                await pc.setLocalDescription(offer);
+                console.log("Offre SDP créée et définie localement");
+                status.textContent = "Offre SDP créée et envoyée";
 
-            if (!response.ok) {
-                const error = await response.text();
-                console.error("Failed to receive SDP answer:", error);
-                return;
+                // Envoyer l'offre SDP au serveur
+                const response = await fetch('/offer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sdp: pc.localDescription.sdp,
+                        type: pc.localDescription.type
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.text();
+                    console.error("Échec de la réception de la réponse SDP :", error);
+                    status.textContent = "Erreur lors de la réception de la réponse SDP";
+                    return;
+                }
+
+                const answer = await response.json();
+                connectionId = answer.id;
+                console.log("Réponse SDP reçue :", answer);
+                status.textContent = "Réponse SDP reçue";
+
+                // Définir la description distante avec la réponse SDP
+                const remoteDesc = new RTCSessionDescription({
+                    type: answer.type,
+                    sdp: answer.sdp
+                });
+                await pc.setRemoteDescription(remoteDesc);
+                console.log("Description distante définie avec la réponse SDP");
+                status.textContent = "Description distante définie";
+
+            } catch (err) {
+                console.error("Erreur lors de la configuration de WebRTC :", err);
+                status.textContent = "Erreur lors de la configuration de WebRTC";
             }
-
-            const answer = await response.json();
-            const remoteDesc = new RTCSessionDescription(answer);
-            await pc.setRemoteDescription(remoteDesc);
-            console.log("Received and set remote SDP answer");
         }
 
-        start().catch(err => {
-            console.error("Error during WebRTC setup:", err);
-        });
+        async function sendCandidate(connectionId, candidate) {
+            try {
+                const response = await fetch('/candidate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: connectionId,
+                        sdpMid: candidate.sdpMid,
+                        sdpMLineIndex: candidate.sdpMLineIndex,
+                        candidate: candidate.candidate
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.text();
+                    console.error("Échec de l'ajout du candidat ICE :", error);
+                } else {
+                    console.log("Candidat ICE ajouté avec succès");
+                }
+            } catch (err) {
+                console.error("Erreur lors de l'envoi du candidat ICE :", err);
+            }
+        }
+
+        // Démarrer le processus WebRTC au chargement de la page
+        window.onload = () => {
+            start().catch(err => {
+                console.error("Erreur lors de l'initialisation :", err);
+                document.getElementById('status').textContent = "Erreur lors de l'initialisation";
+            });
+        };
     </script>
 </body>
 </html>
